@@ -1,0 +1,676 @@
+function listControls o,n
+   if n is empty and num(words of o) >1 then
+      put "put the controlNames of"&& o && "into nm" into tcom
+   else
+      put "put the controlNames of"&& o && quote & n & quote &"into nm" into tcom
+   end if
+   put tcom
+   try
+      do tcom
+   catch tErr
+      if tErr is not empty then put "listControls error:" && tErr
+   end try
+   if nm is empty then return empty
+   repeat for each line L in nm
+      put "put the name of control ID" &&  L & "& cr after tList" into tCom
+      do tCom
+   end repeat
+   return tList
+end listControls
+
+function getOProp tObj, tProp
+   put "put the" && tProp && "of" && tObj && "into output" into tCommand
+   try
+      do tCommand
+   catch tErr
+      if tErr is not empty then
+         return "Error getOProp:" && tCommand 
+      end if
+      end try
+   return output
+end getOProp
+
+function SendToPoint n1,n2,tGridSize
+   return (n1+n2)*tGridSize
+end SendToPoint
+
+
+on setOProp tObj,tProp,tVal
+   if exists (tObj) then
+      put "set the"&& tProp  &&"of" && tObj && "of this stack"  && "to"&& tVal into tCommand
+      try
+         do tCommand 
+      catch tErr
+         if tErr is not empty then
+            put tCommand
+            exit setOprop
+         end if
+      end try
+   end if
+end setOProp
+
+
+on SendToTool
+   if the mouseloc is  within the rect of group "MapGroup" and the mapTool of group "mapGroup" is "SendTo"  then 
+      
+      put getOprop("this stack","cCurrentGridSize") into tGridSize
+      put getOprop("this stack","selectedMapObjectName") into tSelection
+      put "Grid:" && tGridSize &cr& "Selected:" && tSelection  & cr after field "StatusUpdate"
+      focus group "Mapgroup" of stack "Mapstack"
+      
+      if tSelection is empty then 
+         set the mapTool of group "MapGroup" to "Select"
+         set the hilite of button "SendToButton" to false
+         pass SendToTool
+      end if
+      if  the mouseControl is not empty then put the name of the mousecontrol & cr after field "StatusUpdate"
+      set itemDel to "_"
+      put char 2 to -2 of word 2 of tSelection into tNam
+      if item -1 tNam is "SendToLine" then
+         put item 1 of tNam into tNam
+         put "graphic" && quote &  tNam & quote into tSelection
+      end if
+      put getOProp(tSelection,"originalLoc") into oXY
+      put tNam & "_SendToLine" into tNewName
+      
+      set itemDel to comma
+      put item 1 of oxy*tGridSize  & "," & item 2 of oxy* tGridSize into nXY
+      put getOprop(tSelection,"loc") into Lxy
+      put "orgin:" && nXY & cr & "loc:" && Lxy & cr after field "StatusUpdate"
+      put the mouseloc into mXY
+      subtract 10 from item 1 of mXY
+      subtract 10  from item 1 of mXY
+      
+      put Lxy & cr & mXY into tPoints
+      set the tempPoints of this stack to tPoints
+      
+      put "graphic" && quote & tNam & "_SendToLine" & quote && "of group" && quote &"MapGroup" & quote into tGrf
+      if exists (tGrf) is true then 
+         put "clear" && tGrf into tCom
+         do tCom
+      end if
+      if exists (tGrf) is not true then 
+         set the name of the templateGraphic to tNewName
+         set the style of the templateGraphic to   "line"
+         set the backgroundColor of the templateGraphic to empty
+         set the points of the templateGraphic to tPoints
+         set the lineSize of the templateGraphic to 2
+         create graphic tnewName  in group "Mapgroup"
+      end if
+      setOProp tGrf,"disabled",true
+      put the mouseloc into tXY
+      set itemDel to comma
+      put item 1 of Lxy/tGridSize  into x1
+      put item 2 of Lxy /tGridSize into y1
+      put  (item 1 of tXY)/tGridSize into x2
+      put  (item 2 of tXY)/tGridSize into y2
+      put sqrt((x1-x2)*(x1-x2)) into xd
+      put sqrt((y1-y2)*(y1-y2)) into yd
+      if x2 < x1 then put xd *-1 into xd
+      if y2 <y1 then put yd * -1 into yd
+      --put sqrt((y1-y2)*(y1-y2)) into yd
+      put xd &"," & yd into tDistance
+      
+      --put sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2)) into tDistance
+      put x2 &"," & y2 into desXY
+      put mXY into field "SentToLabel"
+      setOProp tSelection,"cSendToDestination",desXY
+      setOprop tGrf,"originalLoc",oXY
+      setOProp tGrf,"cSendToDestination",desXY
+      setOProp tGrf,"cSendToDistance",tDistance
+   end if
+   
+   unlock screen
+   if the mouse is down then send SendToTool to this stack in 10 milliseconds
+end SendToTool
+
+
+
+on RedrawMapGroup tGridSize
+   lock screen
+   set itemDel to comma
+   repeat with x = 1 to the number  of controls of group "mapgroup" of this card
+      put the name of control x of group "mapgroup" into tSelection
+      put the originalLoc of tSelection into oXY
+      put getOprop(tSelection,"style") into tStyle
+      switch (tStyle)
+         case "oval"
+            if oXY is not empty then
+               set the loc of tSelection to  (item 1 of  oXY*tGridSize) ,  (item 2 of oXY*tGridSize)
+            end if
+            break
+         case "line"
+            --beep
+            if oXY is not empty then
+               put getOprop(tSelection, "cSendToDistance") into dXY
+               put  (item 1 of oxy  + item 1 of dXY)*tGridSize into dx
+               put ( item 2 of oxy + item 2 of dXY)*tGridSize into dy
+               put (item 1 of  oXY*tGridSize) ,  (item 2 of oXY*tGridSize) into tPoints
+               put cr & dx &"," &  dy after tPoints
+               set the points of tSelection to tPoints
+            end if
+            break
+      end switch
+   end repeat
+   focus nothing
+   unlock screen
+end RedrawMapGroup
+
+on rawKeyDown theKey
+   if the tool is not "browse tool" then pass rawKeyDown
+   put getOProp("this stack","cCurrentGridSize") into tGridSize
+   put "Rawkey:" && thekey & cr & "Grid:" && tGridSize into field "rawKey"
+   put tGridSize into oldSize
+   local tCurrentScroll
+   put the vScroll of group "mapgroup" into tCurrentScroll 
+   switch theKey
+      case 65309
+         if the screenmouseloc is within the rect of group "Mapgroup" then ResizeGrid 2   
+         break
+      case 65308
+         if the screenmouseloc is within the rect of group "Mapgroup" then ResizeGrid -2
+         break 
+      case 96 --tilde
+         if the TurfSent of this stack is not true then
+            go to card 1 of this stack
+            set the rect of button  "mapAnnouncement" to item 1 the rect of group "mapgroup", item 2 the rect of group "mapgroup",  item 3 the rect of group "mapgroup", item 4 the rect of group "mapgroup" 
+            show button "mapAnnouncement"
+            set the selectedMapObjectName of this stack to empty
+            generateTurf
+            put empty into field "StatusUpdate" of card 1 of this stack
+         end if 
+         break
+      case 65293 -- enter key to go to next game turn
+         --beep
+         nextGameTurn
+         break
+   end switch
+   unlock screen
+   pass rawKeyDown
+end rawKeyDown
+
+on ResizeGrid tAmount
+   lock screen
+   put getOProp("this stack","cCurrentGridSize") into tGridSize
+   put tGridSize into oldSize
+   add tAmount to tGridSize 
+   if tGridSize  < 8  then put 8 into tGridSize 
+   if tGridSize > 24 then  put 24 into tGridSize 
+   
+   if tGridSize is not oldSize then
+      setOProp "this stack","cCurrentGridSize",tGridSize
+      RedrawMapGroup tGridSize
+      setGridSizeAndMakeGrid tGridSize
+      put  the hScroll of group "mapgroup" into hS
+      put  the vScroll of group "mapgroup" into  vS
+      add   sqrt((tGridSize-oldSize)*(tGridSize-oldSize))/2 to  hs
+      add sqrt((tGridSize-oldSize)*(tGridSize-oldSize))/2  to vs
+      put 180+(64*tGridSize) into tBound
+      --put the boundingRect of group "MapGroup" into mRect
+      set the boundingRect of group "mapgroup" to -10,-10,tBound,tBound
+      set  the hScroll of group "mapgroup" to hs
+      set  the vScroll of group "mapgroup" to  vs
+      --set the loc of image "spaceimage" to 0,0
+   end  if
+--unlock screen
+end ResizeGrid
+-- Generate Player Home
+
+on PlayerOriginStart x,y,playername,tColor1,tColor2
+   put "x:"&x & space & "y:" & y into tName 
+   put "graphic"&&quote & tName & quote  into tplayer
+   setOProp tplayer,"backgroundColor",tColor1
+   setOProp tplayer,"foregroundColor",tColor2
+   setOProp tplayer,"lineSize",2
+   setOProp tplayer,"cCurrentOwner",playername
+   setOProp tplayer,"name",playername
+   setOProp tplayer,"tooltip",playername
+   setOProp tplayer,"height",16
+   setOProp tPlayer,"width",16
+   setOprop tPlayer,"outerGlow","true"
+   setOprop tPlayer,"effectColor","white"
+   setOprop tPlayer,"effectSize",10
+   
+   --setOprop tPlayer,"cPlayer1TurfList",xy
+   if x<10 then add 5 to x
+   if y<10 then add 5 to y
+   put x & "," & y into xy
+   setOProp tPlayer,"location",xy
+   setOprop tPlayer,"cTurfList",playername
+   set the selectedMapObjectName of this stack to "graphic" && quote & playername &quote
+end PlayerOriginStart
+
+on PlayerTurn playerName
+   put "graphic" && quote & playerName & quote into tControl
+   put playerName & cr & getOProp(tControl,"cTurfList") into tList
+   
+   
+   repeat for each line L in tList
+      if L is not empty then
+         put "graphic" && quote & L & quote into tTarget
+         
+         put getOProp(tTarget,"cCurrentCommunity") into c1
+         put getOProp(tTarget,"cCurrentPersonnel") into c2
+         put getOProp(tTarget,"cCurrentAdvantage") into c3
+         put getOProp(tTarget,"cCurrentPopulation") into c4
+         
+         put getOProp(tTarget,"cGoalCommunity") into g1
+         put getOProp(tTarget,"cGoalPersonnel") into g2
+         put getOProp(tTarget,"cGoalAdvantage") into g3
+         
+         if c1 >g1 then subtract 1 from c1
+         if c1<g1 then add 1 to c1
+         if c2>g2 then subtract 1 from c2
+         if c2<g2 then add 1 to c2
+         if c3 >g3 then subtract 1 from c3
+         if c3<g3 then add 1 to c3
+         put c1 & cr & c2 & c3 & cr after field "StatusUpdate" of card 1 of this stack
+         setOProp tTarget,"cCurrentAdvantage",c1
+         setOProp tTarget,"cCurrentCommunity",c2
+         setOProp tTarget,"cGoalPersonnel",c3
+         
+         put getOProp(tTarget,"cCurrentDevelopType")  into tDeveloped
+         
+         put "cCurrent" & tDeveloped & "Complete" into tProp
+         
+         put getOProp(tTarget,tProp) into tVal
+         put (c4*.03+g2*0.3) into tCP
+         add tCP to tVal
+         put tVal & cr after field "StatusUpdate" of card 1 of this stack
+         
+         
+         if tVal > 99 then 
+            put "Created a new" && tDeveloped && "@"&& getOProp("this stack","cCurrentGameTurn") into tLabel
+            put "Status:" && tLabel &cr into field "StatusUpdate" of group "HomeGroup" of card 1 of this stack
+            put 1 into tVal
+            
+            setOProp tTarget,tProp,tVal
+            
+            put getOProp(tTarget,"customKeys[Activity]") into tList
+            put the number of lines of tList+1 into nActivity
+            put "Activity["&nActivity&"]" into setActive
+            setOProp tTarget,setActive,tDeveloped
+            put cr & tDeveloped after tList
+            if tList is not empty then
+               setOProp(tTarget,Activity,tList)
+            end if
+            
+         end if
+         setOProp tTarget,tProp,tVal
+         
+         setOProp tTarget,"cCurrentPopulation",(c4+c1) 
+         
+      end if
+   end repeat
+   
+end PlayerTurn
+
+
+
+
+
+on DefaultTurfMarker
+   set the backgroundColor of the templategraphic to white
+   set the foregroundColor of the templateGraphic to white
+   set the opaque of the templateGraphic to true
+   set the lineSize of the templateGraphic to 1
+   set the style of the  templategraphic to oval
+   set the height of the  templategraphic to 8
+   set the width of the  templategraphic to 8 
+   set the colorOverlay of the templateGraphic to empty
+   TurfGameProps
+end DefaultTurfMarker
+
+
+on TurfGameProps
+   set the cCurrentCommunity of the templateGraphic to 17
+   set the cCurrentPersonnel of the templateGraphic to 17
+   set the cCurrentAdvantage of the templateGraphic to 17
+   
+   set the cGoalCommunity of the templateGraphic to 17
+   set the cGoalPersonnel of the templateGraphic to 17
+   set the cGoalAdvantage of the templateGraphic to 17
+   
+   set the cCurrentPopulation of the templateGraphic to 1000
+   
+   set the cCurrentDevelopType of the templateGraphic to "Sentry"
+   set the cCurrentSentryComplete of the templateGraphic to 1
+   set the cCurrentPatrolComplete of the templateGraphic to 1
+   set the cCurrentLeaderComplete of the templateGraphic to 1
+   set the cCurrentEnforcerComplete of the templateGraphic to 1
+   
+   set the cCurrentBoonLevel of the templateGraphic to 1
+   set the cCurrentOwner of the templateGraphic to "None"
+   set the Activity[1] of the templateGraphic to "Sentry"
+end TurfGameProps
+
+on GenerateTurf
+   
+   put 16 into tGridSize
+   setGridSizeAndMakeGrid  tGridSize
+   lock screen
+   put empty into tOwnership
+   put empty into tXYs
+   repeat for each line L in the controlNames of group "Mapgroup"
+      put "put the name of control ID" &&  L &&  "into tTarget" into tCom
+      do tCom
+      if exists (tTarget) is true then
+         put "clear" && tTarget into tCom
+         put tcom & cr after tComs
+         try
+            do tCom
+         catch tErr
+            if tErr is not empty then 
+               put tErr into field "StatusUpdate"
+               exit generateturf
+            end if
+         end try
+      end if
+   end repeat
+   put tComs into field "StatusUpdate"
+   defaultTurfMarker
+   put 0 into i
+   repeat while i < 64
+      put 10+random(50) into x 
+      put 10+random(50) into y    
+      put x & "," &y into tcheck
+      if tcheck is among the lines of tCoordinates then
+         add random(8) to x
+         add random(8) to y
+         subtract random(8) from  x
+         subtract random(8) from  y
+      end if
+      put x,y &  cr after tXYs
+      put "x:"&x & space & "y:" & y into tName
+      set the loc of  the  templategraphic to  x,y
+      set the originalLoc of the templateGraphic to x,y
+      create graphic tName  in group "mapgroup"
+      add 1 to i
+   end repeat
+   put char 1 to -2 of tXYs into tCoordinates
+   set the spawnCoordinates of group "mapgroup" to tCoordinates
+   put num(lines of tCoordinates) into tLen
+   put random (5) + random (15) into tEL
+   put line 1 to tEL-1 of tXYs &cr & line (tEL+1) to -2  of tXYs into nChoice
+   put line tEL of tXYs into eXY --enemyhome
+   PlayerOriginStart item 1 of eXY,item 2 of eXY, "player0","orange","Red"
+   --setOProp "this stack","cPlayer0TurfList","player0"
+   put line random(num(lines of nChoice)-2 ) of nChoice into playerOriginLine
+PlayerOriginStart item 1 of playerOriginLine, item 2 of playerOriginLine,"player1","SkyBlue","SteelBlue"
+   set the TurfSent of this stack  to false
+   set the boundingRect of group "mapgroup" to -200,-200,640,640
+   put "Turn:" && 1 into field "TurnLabel" 
+   setOProp "this stack","cCurrentGameTurn",1
+   hide button "mapannouncement"
+   focus group "Mapgroup" of stack "Mapstack"
+   unlock screen
+end GenerateTurf
+
+on NextGameTurn
+   PlayerTurn "Player0"
+   PlayerTurn "Player1"
+   put getOProp("this stack","cCurrentGameTurn") into tTurn
+   if tTurn is empty then put 0 into tTurn
+   add 1 to tTurn
+   setOProp "this stack","cCurrentGameTurn",tTurn
+   put "Turn:" && tTurn into field "TurnLabel" 
+end NextGameTurn
+
+
+on DeselectPrevious
+   put the selectedMapObjectName of this stack  into oldControlName
+   put 10 into objSize
+   put "green" into defaultLineColor
+   put getOProp(oldControlName,"cCurrentOwner") into tOwner
+   if tOwner is not "player1" then 
+      put "white" into defaultLineColor
+      put 1 into tLineSize
+   else
+      put "lightskyblue2" into defaultLineColor
+      put 2 into tLineSize
+   end if
+   if char 2 to -2 of word 2 of  oldControlName is "player1" then put 16 into objSize
+   if oldControlName is not empty then
+      setOProp oldControlName,"foregroundColor",defaultLineColor
+      setOProp oldControlName,"lineSize",tLineSize
+      setOProp oldControlName,"height",objSize
+      setOProp oldControlName,"width",objSize
+   end if
+end DeselectPrevious
+
+on    SelectUnderMouse
+   if (the mouseControl) is empty then exit selectUnderMouse
+   if word 1 the name of (the mouseControl) is not "graphic" then exit selectUnderMouse
+   put 10 into objSize
+   put "green" into defaultLineColor
+   put the name of the mouseControl into tSelection
+   
+   -- Deselect PreviousSelection
+   DeselectPrevious
+   if char 2 to -2 of word 2 of  tSelection is not "player1" then  put 8 into objSize
+   -- select Object
+   setOProp tSelection,"foregroundColor","green"
+   setOProp tSelection,"lineSize",3
+   setOProp tSelection,"height",objSize+4
+   setOProp tSelection,"width",objSize+4
+   set the selectedMapObjectName of this stack to word 1 of  tSelection && word 2 of tSelection
+   put getOProp(tSelection,"originalLoc")  into tPos
+   
+   --Update turf info scrollbars.
+   put getOProp(tSelection,"cCurrentCommunity") into tCom
+   put getOProp(tSelection,"cCurrentPersonnel") into tSec
+   put getOProp(tSelection,"cCurrentAdvantage") into tAdv
+   
+   set the thumbPosition of scrollbar "TurfScrollbar1" of card 1 to tCom
+   set the thumbPosition of scrollbar "TurfScrollbar2"  of card 1 to tSec
+   set the thumbPosition of scrollbar "TurfScrollbar3"  of card 1 to tAdv
+   
+   put getOProp(tSelection,"cCurrentDevelopType") into tLabel
+   set the label of button "DevelopMenu" of group "Homegroup" of card "TurfInfo" to tLabel
+   
+   
+   set the label of button "positionbutton" of card 1 of this stack to "Position:" && tPos
+   put char 2 to -2 of word 2 of tSelection into field "MapSelectionNameLabel" 
+   put "Citizens:" && getOProp(tSelection,"cCurrentPopulation") into tcitz
+   set the label of button "populationbutton"  of card 1 of this stack to tcitz
+   set the label of button "BoonButton" of card 1 of this stack to "Boon:" && getOProp(tSelection,"cCurrentBoonLevel")
+   --beep
+   if getOProp(tSelection,"cCurrentOwner") is not "player1" then
+      set the disabled of group "HomeGroup" of card "TurfInfo" to true
+      setOProp tSelection,"foregroundColor","gray"
+   else
+      set the disabled of group "HomeGroup" of card "TurfInfo" to false
+      setOProp tSelection,"foregroundColor","170,170,255"
+   end if
+   
+   --List the current activity in the location
+   put getOProp(tSelection,"customKeys[Activity]") into tAct
+   set the Activity of field "TopField" of card 2 of this stack to  tAct
+   put 1 into nAct
+   repeat for each line tSuspect in tAct
+      put "Activity[" & nAct &"]" into tLine
+      put getOProp(tSelection,tLine) &cr after tListed
+      add 1 to nAct
+   end repeat
+   put char 1 to -2 of tListed into field "TopField" of card 2 of this stack
+   beep
+end SelectUnderMouse
+
+on ScrollbarDrag
+   if the mouse is not down then exit ScrollbarDrag
+   put the name of the focusedObject into tMouseObject
+   put char -2 of tMouseObject into scrollNum
+  
+   if word 1 of tMouseObject is "scrollbar" then
+      put the thumbPosition of scrollbar "TurfScrollbar1" into sb1
+      put the thumbPosition of scrollbar "TurfScrollbar2" into sb2
+      put the thumbPosition of scrollbar "TurfScrollbar3" into sb3
+      put "put the thumbPosition of" && tMouseObject && "into tPosition" into scriptString2
+      do scriptString2
+      put "put the lastThumbPosition of" && tMouseObject &&" into oldThumb" into scriptString3
+      do scriptString3
+      put ((oldThumb -tPosition) * oldThumb)/33 into difference
+      put "set the lastThumbPosition of" && tMouseObject &&  " to tPosition" into scriptString4
+      --put "tPosition = " && tPosition
+      do scriptString4
+      
+      switch scrollNum
+         case 1
+            add difference to sb2
+            add difference to sb3
+            setScroll 2,sb2
+            setScroll 3,sb3
+            break
+         case 2
+            add difference to sb1
+            add difference to sb3
+            setScroll 1,sb1
+            setScroll 3,sb3
+            break
+         case 3
+            add difference to sb1
+            add difference to sb2
+            setScroll 1,sb1
+            setScroll 2,sb2
+            break
+      end switch
+      set the lastThumbPosition of scrollbar "TurfScrollbar1" to sb1
+      set the lastThumbPosition of scrollbar "TurfScrollbar2" to sb2
+      set the lastThumbPosition of scrollbar "TurfScrollbar3" to sb3
+      setScrollProps
+   end if
+   
+end ScrollbarDrag
+
+on SetScrollProps
+   put line 1 of field "MapSelectionNameLabel" into tName
+   if tName is not empty then 
+      put "graphic" && quote & tName & quote  into  tSelection
+      setOProp tSelection,"cGoalCommunity", the thumbPosition of scrollbar "TurfScrollbar1"
+      setOProp tSelection,"cGoalPersonnel",the thumbPosition of scrollbar "TurfScrollbar2"
+      setOProp tSelection,"cGoalAdvantage", the thumbPosition of scrollbar "TurfScrollbar3"
+   end if
+   
+end SetScrollProps
+
+
+on SetScroll n,val
+   put "put  the enabled of scrollbar" && quote & "TurfScrollbar" & n & quote && "into tEditable" into tCommand
+   do tCommand
+   if tEditable is  true then
+      put "set the thumbPosition of scrollbar" && quote & "TurfScrollbar" & n & quote & "to" && val into tCommand
+      do tCommand
+   end if
+end SetScroll
+   
+on UpdatePosition x,y
+   set the label of button "positionbutton" to "Position:" &&  x,y
+
+end UpdatePosition
+
+on UpdateName tName
+   if tName is empty then put "Area Name Text:" into tName
+   put tName into field "NeighborhoodNameLabel"
+   
+end UpdateName
+
+
+on SetGridSizeAndMakeGrid tSize
+   set the gridSize to tSize 
+   if there is a stack "revPreferences" then
+      set the cGridSize of stack "revPreferences" to tSize
+   end if
+   send makeGrid to group "showGridWidget"
+   --set the label of button "gridMaker" of the owner of me to "hide Grid"
+   focus on nothing
+end SetGridSizeAndMakeGrid
+
+on mouseDown
+   if the mouseloc is within the rect of group "MapGroup" then
+      switch (the mapTool of group "MapGroup")
+         case "SendTo"
+            SendToTool
+           --SelectUnderMouse
+          
+            if (the mouseControl) is not empty    then 
+               if word 1 the name of (the mouseControl) is  "graphic" then 
+                  put the name of (the mouseControl) into tSelection
+                  put char 2 to -2 of word 2 of tSelection into tNam
+                  set itemDel to "_"
+                  if item -1 tNam is "SendToLine" then
+                     put item 1 of tNam into tNam
+                     put "graphic" && quote &  tNam & quote into tSelection
+                     setOprop "","selectedMapObjectName",tSelection
+                  end if
+                  --selectUnderMouse
+               else
+                  DeselectPrevious
+               end if
+            end if
+            break
+         case "Select"   
+            if (the mouseControl) is not empty    then 
+               if word 1 the name of (the mouseControl) is  "graphic" then 
+                  put the name of (the mouseControl) into tSelection
+                  put char 2 to -2 of word 2 of tSelection into tNam
+                  set itemDel to "_"
+                  if item -1 tNam is "SendToLine" then
+                     put item 1 of tNam into tNam
+                     put "graphic" && quote &  tNam & quote into tSelection
+                     setOprop "","selectedMapObjectName",tSelection
+                  end if
+                  selectUnderMouse
+               end if
+               else 
+                  DeselectPrevious
+               end if
+            break
+      end switch
+      
+   end if
+   if the mouse is down then send mouseDown to me in 10 milliseconds
+end mouseDown
+   
+   
+   
+on mouseUp bt
+   if the mouseloc is within the rect of group "MapGroup" then
+      switch (the mapTool of group "MapGroup")
+         case "SendTo"
+            --if bt is 3 then
+            put getOprop("this stack","selectedMapObjectName") into tSelection
+            put char 1 to -2 of tSelection & "_SendToLine" & quote into tLine
+            setOProp tLine,"blendLevel",60
+            set the mapTool of  group "MapGroup" to "Select"
+            set the hilite of button "SendToButton" to false
+            --end if
+            SendToTool
+            break
+         case "Select"   
+            if (the mouseControl) is not empty    then 
+             
+               if word 1 the name of (the mouseControl) is  "graphic" then 
+                  put the name of (the mouseControl) into tSelection
+                  put char 2 to -2 of word 2 of tSelection into tNam
+                  set itemDel to "_"
+                  if item -1 tNam is "SendToLine" then
+                     put item 1 of tNam into tNam
+                     put "graphic" && quote &  tNam & quote into tSelection
+                     setOprop "","selectedMapObjectName",tSelection
+                  end if
+                  selectUnderMouse
+               end if
+               if (the mouseControl) is empty then 
+               --put the selectedMapObjectName of this stack  into oldControlName
+               DeselectPrevious
+            end if
+         end if
+         break
+   end switch
+   
+end if
+
+pass mouseUp
+end mouseUp
+
+
